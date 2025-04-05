@@ -1,9 +1,7 @@
 use anyhow::Error;
 use anyhow::Result;
 use esp_idf_svc::eventloop::EspSystemEventLoop;
-use esp_idf_svc::hal::gpio::Gpio21;
 use esp_idf_svc::hal::prelude::*;
-use esp_idf_svc::hal::rmt::RMT;
 use esp_idf_svc::http::server::Configuration;
 use esp_idf_svc::http::server::EspHttpServer;
 use esp_idf_svc::http::Method;
