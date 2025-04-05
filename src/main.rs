@@ -13,6 +13,8 @@ use esp_idf_svc::wifi::BlockingWifi;
 use esp_idf_svc::wifi::EspWifi;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
 use ws2812_esp32_rmt_driver::Ws2812Esp32RmtDriver;
 
 const SSID: &str = env!("SSID");
@@ -85,7 +87,7 @@ fn main() -> Result<()> {
 
     let mut peripherals_manager =
         PeripheralsManager::new(peripherals.pins.gpio21, peripherals.rmt)?;
-    let mut state = Arc::new(Mutex::new(State::new()));
+    let state = Arc::new(Mutex::new(State::new()));
 
     let mut server = EspHttpServer::new(&Configuration::default())?;
 
@@ -109,7 +111,10 @@ fn main() -> Result<()> {
     })?;
 
     loop {
-        peripherals_manager.update_peripherals(&state.lock().unwrap());
+        peripherals_manager
+            .update_peripherals(&state.lock().unwrap())
+            .unwrap();
+        thread::sleep(Duration::from_millis(150));
     }
 }
 
