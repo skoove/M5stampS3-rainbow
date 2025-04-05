@@ -60,12 +60,6 @@ impl State {
 }
 
 impl PeripheralsManager {
-    fn new(pin21: Gpio21, rmt: RMT) -> Result<Self> {
-        Ok(Self {
-            led: Ws2812Esp32RmtDriver::new(rmt.channel0, pin21)?,
-        })
-    }
-
     fn set_led_color(&mut self, color: [u8; 3]) -> Result<()> {
         self.led.write_blocking(to_grb(color).into_iter())?;
         Ok(())
@@ -117,8 +111,10 @@ fn main() -> Result<()> {
 
     connect_wifi(&mut wifi)?;
 
-    let mut peripherals_manager =
-        PeripheralsManager::new(peripherals.pins.gpio21, peripherals.rmt)?;
+    let mut peripherals_manager = PeripheralsManager {
+        led: Ws2812Esp32RmtDriver::new(peripherals.rmt.channel0, peripherals.pins.gpio21)?,
+    };
+
     let state = Arc::new(Mutex::new(State::new()));
 
     let mut server = EspHttpServer::new(&Configuration::default())?;
