@@ -30,6 +30,7 @@ log = "0.4"
 esp-idf-svc = { version = "0.51", features = [ "embassy-time-driver", "embassy-sync"] }
 ws2812-esp32-rmt-driver = { version ="0.12.0"}
 anyhow = "1.0.97"
+hsv = "0.1.1"
 
 [build-dependencies]
 embuild = "0.33"
