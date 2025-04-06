@@ -2,6 +2,8 @@ use anyhow::Error;
 use anyhow::Result;
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::prelude::*;
+use esp_idf_svc::hal::temp_sensor;
+use esp_idf_svc::hal::temp_sensor::TempSensorDriver;
 use esp_idf_svc::http::server::Configuration;
 use esp_idf_svc::http::server::EspHttpServer;
 use esp_idf_svc::http::Method;
@@ -27,20 +29,23 @@ struct State {
     colorloop: bool,
     colorloop_progress: u16,
     last_animation_update: Instant,
+    temp: Option<f32>,
 }
 
 struct PeripheralsManager {
     led: Ws2812Esp32RmtDriver<'static>,
+    temp_sensor: TempSensorDriver<'static>,
 }
 
 impl State {
     fn new() -> Self {
         Self {
-            led_color: [000, 255, 000],
+            led_color: [255, 000, 000],
             led_on: true,
             colorloop: false,
             colorloop_progress: 0,
             last_animation_update: Instant::now(),
+            temp: None,
         }
     }
 
@@ -69,6 +74,17 @@ impl PeripheralsManager {
     }
 
     fn update_peripherals(&mut self, state: &mut State) -> Result<()> {
+        self.update_led_from_state(state)?;
+        self.update_temp_sensor_state(state)?;
+        Ok(())
+    }
+
+    fn update_temp_sensor_state(&mut self, state: &mut State) -> Result<()> {
+        state.temp = Some(self.temp_sensor.get_celsius()?);
+        Ok(())
+    }
+
+    fn update_led_from_state(&mut self, state: &mut State) -> Result<()> {
         if state.led_on {
             if state.colorloop {
                 // advance colour loop only if its been more than 15 ms since the last update
@@ -111,7 +127,14 @@ fn main() -> Result<()> {
 
     let mut peripherals_manager = PeripheralsManager {
         led: Ws2812Esp32RmtDriver::new(peripherals.rmt.channel0, peripherals.pins.gpio21)?,
+        temp_sensor: TempSensorDriver::new(
+            &temp_sensor::config::Config::new(),
+            peripherals.temp_sensor,
+        )?,
     };
+
+    // enable temp sensor before we try and use it, otherwise things will panic when they try and retrive data
+    peripherals_manager.temp_sensor.enable()?;
 
     let state = Arc::new(Mutex::new(State::new()));
 
@@ -123,6 +146,9 @@ fn main() -> Result<()> {
                 <body>
                     <h1>rainbow m5stamps3, with rust!</h1>
                     <hr>
+                    <div>
+                        temperature: <span id='temp'>loading...</span>
+                    </div>
                     <div>
                         <button onclick='fetch(\"/toggle\")'>toggle led</button>
                         <button onclick='fetch(\"/colorloop\")'>toggle colour loop</button>
@@ -136,6 +162,18 @@ fn main() -> Result<()> {
                             const b = parseInt(color.substr(5,2), 16);
                             fetch(`/color?r=${r}&g=${g}&b=${b}`);
                         }
+
+                        async function update_temp_value() {
+                            try {
+                                const response = await fetch('/temp');
+                                const data = await response.text();
+                                document.getElementById('temp').textContent = data;
+                            } catch (e) {
+                                console.error('Error fetching sensor data:', e);
+                            }
+                        }
+                        setInterval(update_temp_value, 250);
+                        update_temp_value();
                     </script>
                 </body>
             </html>",
@@ -160,10 +198,22 @@ fn main() -> Result<()> {
         Ok::<(), Error>(())
     })?;
 
+    // handle temp data
+    let state_ref = state.clone();
+    server.fn_handler("/temp", Method::Get, move |request| {
+        if let Some(temp) = state_ref.lock().unwrap().temp {
+            request
+                .into_ok_response()?
+                .write_all(format!("{}", temp).as_bytes())
+        } else {
+            request.into_ok_response()?;
+            Ok(())
+        }
+    })?;
+
     // handle set color
     let state_ref = state.clone();
     server.fn_handler("/color", Method::Get, move |request| {
-        log::info!("colour change requested");
         log::info!("{}", &request.uri());
         let params: HashMap<_, _>;
         if let Some(query) = &request.uri().split('?').nth(1) {
