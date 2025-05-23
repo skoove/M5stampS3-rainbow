@@ -144,7 +144,7 @@ fn main() -> Result<()> {
         request.into_ok_response()?.write_all(
             b"<html>
                 <body>
-                    <h1>rainbow m5stamps3, with rust!</h1>
+                    <h1>rainbow m5stamps3</h1>
                     <hr>
                     <div>
                         temperature: <span id='temp'>loading...</span>
